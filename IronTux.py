@@ -3,7 +3,7 @@
 ============================================================
 IronTux (Enterprise Offline)
 Focus: Post-Install Security, Anti-Bruteforce, Port Sealing
-Features: OOP, Docker-Safe Firewall, Auto-Backup & Restore
+Features: OOP, Docker-Safe Firewall, Auto-Backup & Restore, Auto-Patching
 ============================================================
 """
 
@@ -41,7 +41,8 @@ CRITICAL_FILES = [
     "/etc/selinux/config",
     "/etc/default/ufw",
     "/etc/ufw/after.rules",
-    "/etc/firewalld/zones/public.xml"
+    "/etc/firewalld/zones/public.xml",
+    "/etc/apt/apt.conf.d/50unattended-upgrades"
 ]
 
 @dataclass
@@ -50,6 +51,7 @@ class HardeningContext:
     pkg_manager: str = ""
     os_family: str = ""
     ssh_port: str = "22"
+    new_user: str = ""
     report_log: List[Dict[str, str]] = field(default_factory=list)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -141,6 +143,49 @@ class SecurityHardener:
     def __init__(self, sys_mgr: SystemManager):
         self.sys = sys_mgr
 
+    def update_and_patch(self):
+        """Updates packages and configures unattended upgrades."""
+        if self.sys.ctx.os_family == "debian":
+            self.sys.run("apt-get update && apt-get upgrade -y")
+            self.sys.run("apt-get install -y unattended-upgrades")
+            if not self.sys.ctx.dry_run:
+                self.sys.run("dpkg-reconfigure --priority=low unattended-upgrades", ignore_error=True)
+            self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": "System updated & Unattended-Upgrades configured"})
+        elif self.sys.ctx.os_family == "rhel":
+            self.sys.run("dnf update -y")
+            self.sys.run("dnf install -y dnf-automatic")
+            if not self.sys.ctx.dry_run:
+                self.sys.run("systemctl enable --now dnf-automatic.timer")
+            self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": "System updated & DNF-Automatic configured"})
+        else:
+            # Fallback for others
+            update_cmd = {"suse": "zypper update -y", "arch": "pacman -Syu --noconfirm", "alpine": "apk upgrade"}.get(self.sys.ctx.os_family, "")
+            if update_cmd:
+                self.sys.run(update_cmd)
+                self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": "System updated (Auto-patching not supported for this OS)"})
+
+    def configure_user(self):
+        """Creates a new user and grants sudo privileges."""
+        user = self.sys.ctx.new_user
+        if not user:
+            self.sys.ctx.report_log.append({"status": "SKIP", "msg": "User creation skipped"})
+            return
+
+        check_user = self.sys.run(f"id {user}", ignore_error=True)
+        if hasattr(check_user, 'returncode') and check_user.returncode == 0:
+             self.sys.ctx.report_log.append({"status": "SKIP", "msg": f"User '{user}' already exists"})
+             return
+
+        if not self.sys.ctx.dry_run:
+            self.sys.run(f"adduser --disabled-password --gecos '' {user}", ignore_error=True)
+            
+            if self.sys.ctx.os_family == "debian":
+                self.sys.run(f"usermod -aG sudo {user}")
+            elif self.sys.ctx.os_family in ["rhel", "arch", "suse"]:
+                self.sys.run(f"usermod -aG wheel {user}")
+        
+        self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": f"User '{user}' created and added to admin group"})
+
     def harden_ssh(self):
         cfg = "/etc/ssh/sshd_config"
         if not os.path.exists(cfg):
@@ -149,6 +194,7 @@ class SecurityHardener:
         settings = {
             "PermitRootLogin": "no",
             "PasswordAuthentication": "no",
+            "PubkeyAuthentication": "yes",
             "X11Forwarding": "no",
             "MaxAuthTries": "3"
         }
@@ -262,23 +308,6 @@ COMMIT
             
         self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": f"Firewalld sealed. Ports Open: {ssh_port}, 80, 443"})
 
-    def apply_sysctl_hardening(self):
-        sysctl_conf = """# Network security
-net.ipv4.tcp_syncookies = 1
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.all.accept_redirects = 0
-net.ipv4.conf.all.send_redirects = 0
-net.ipv4.icmp_echo_ignore_broadcasts = 1
-kernel.randomize_va_space = 2
-kernel.dmesg_restrict = 1
-"""
-        if not self.sys.ctx.dry_run:
-            with open("/etc/sysctl.d/99-security.conf", "w") as f:
-                f.write(sysctl_conf)
-            self.sys.run("sysctl -p /etc/sysctl.d/99-security.conf", ignore_error=True)
-            
-        self.sys.ctx.report_log.append({"status": "SUCCESS", "msg": "Kernel sysctl (Network & ASLR) secured"})
-
 # ──────────────────────────────────────────────────────────────────────────────
 # UX & DASHBOARD
 # ──────────────────────────────────────────────────────────────────────────────
@@ -337,6 +366,9 @@ def main():
     ))
 
     # Pre-flight Prompts
+    new_user_input = Prompt.ask("[yellow]Enter a new admin username (Leave blank to skip)[/yellow]", default="")
+    ctx.new_user = new_user_input.strip()
+
     ssh_port_input = Prompt.ask("[yellow]Enter your exact SSH Port (Used for Firewall configuration)[/yellow]", default="22")
     if ssh_port_input.isdigit() and 1 <= int(ssh_port_input) <= 65535:
         ctx.ssh_port = ssh_port_input
@@ -357,6 +389,14 @@ def main():
 
     # 2. Hardening Phase
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+        task_update = progress.add_task("[cyan]Updating System & Configuring Auto-Patches...", total=None)
+        hardener.update_and_patch()
+        progress.update(task_update, completed=100)
+        
+        task_user = progress.add_task("[cyan]Setting up Admin User...", total=None)
+        hardener.configure_user()
+        progress.update(task_user, completed=100)
+
         task_ssh = progress.add_task("[cyan]Securing SSH Configuration...", total=None)
         hardener.harden_ssh()
         progress.update(task_ssh, completed=100)
@@ -368,10 +408,6 @@ def main():
         task_fw = progress.add_task("[cyan]Setting up Docker-Safe Firewall...", total=None)
         hardener.configure_firewall()
         progress.update(task_fw, completed=100)
-
-        task_sysctl = progress.add_task("[cyan]Applying Kernel Sysctl Hardening...", total=None)
-        hardener.apply_sysctl_hardening()
-        progress.update(task_sysctl, completed=100)
 
     # 3. Final Report
     display_dashboard(ctx)
