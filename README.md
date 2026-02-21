@@ -92,6 +92,7 @@ sudo python3 IronTux.py --restore /var/backups/hardening_tool/snapshot_YYYYMMDD_
 *(This restores SSH, Fail2Ban, UFW/Firewalld configs, and restarts the services instantly).*
 
 ---
+<img width="3600" height="8733" alt="resim" src="https://github.com/user-attachments/assets/555d5254-8533-4ff6-a46f-ff520b4cd74e" />
 
 ## 🤝 Contributing
 Contributions, issues, and feature requests are welcome! 
