@@ -22,6 +22,47 @@ When you install Docker, it silently bypasses `ufw` or `iptables` to expose your
 - ⏪ **1-Click Rollback:** Creates a `.tar.gz` snapshot of your critical config files BEFORE applying changes. 
 - 🥽 **Dry-Run Mode:** Simulate changes without actually modifying your system.
 
+- Here is a bulleted list of operations and features the script performs, written in English, perfect for your GitHub README:
+
+### 🛡️ Core Capabilities & Operations
+
+- **OS Auto-Detection & Multi-Distro Support**
+  - Automatically identifies the host operating system and selects the appropriate package manager and service controller (`apt-get/Debian`, `dnf/RHEL`, `zypper/SUSE`, `pacman/Arch`, `apk/Alpine`).
+  
+- **Automated System Snapshots (1-Click Rollback)**
+  - Automatically creates a `.tar.gz` backup archive of all critical configuration files (SSH, UFW, Firewalld, Fail2Ban, SELinux, fstab) *before* applying any changes.
+  - Provides a `--restore` flag to instantly revert the system to a previous state and restart affected services.
+
+- **SSH Hardening**
+  - Disables vulnerable `PermitRootLogin`.
+  - Enforces Public Key Authentication by disabling `PasswordAuthentication`.
+  - Disables `X11Forwarding` to prevent session hijacking.
+  - Limits `MaxAuthTries` to 3 to slow down manual intrusion attempts.
+
+- **Anti-Bruteforce Defense**
+  - Installs and configures `Fail2Ban` out of the box.
+  - Automatically applies strict ban policies (1-hour ban after 3 failed login retries).
+
+- **Docker-Safe Firewall Configuration**
+  - Prompts the user to define their custom SSH port to prevent accidental lockouts.
+  - Implements a strict "Default Deny" policy (Incoming: Deny, Outgoing: Allow).
+  - Only opens essential web ports (`80/HTTP`, `443/HTTPS`) and the user-defined SSH port.
+  - Uses `UFW` for Debian-based systems and `Firewalld` for RHEL/SUSE systems.
+  - **Docker Isolation Patch:** Automatically injects custom `DOCKER-USER` iptables rules into UFW to prevent Docker from silently bypassing the firewall and exposing internal container ports to the public internet.
+
+- **Kernel-Level Hardening (`sysctl`)**
+  - Enables TCP SYN Cookies (`tcp_syncookies = 1`) to mitigate SYN flood DDoS attacks.
+  - Enables Reverse Path Filtering (`rp_filter = 1`) to prevent IP spoofing.
+  - Disables ICMP Redirects (`accept_redirects = 0`, `send_redirects = 0`) to prevent MITM routing attacks.
+  - Ignores ICMP Echo Broadcasts to prevent Smurf attacks.
+  - Enforces Address Space Layout Randomization (`randomize_va_space = 2`) to protect against buffer overflow exploits.
+  - Restricts `dmesg` access (`dmesg_restrict = 1`) to hide kernel logs from unprivileged users.
+
+- **Developer & UX Features**
+  - **Dry-Run Mode:** Includes a `--dry-run` flag to simulate all operations and view intended changes without modifying the actual system.
+  - **Rich Terminal UI:** Utilizes the `rich` library to display interactive progress bars, colored status panels, and a final operation summary dashboard. 
+  - **100% Offline Execution:** Performs all hardening operations locally without sending data to external APIs or telemetry servers.
+
 ---
 
 ## 🚀 Quick Start
@@ -43,13 +84,13 @@ Clone the repository and run the script as root:
 ```bash
 git clone https://github.com/coddard/IronTux/
 cd irontux
-sudo python3 harden.py
+sudo python3 IronTux.py
 ```
 
 ### 3. Dry-Run (Test Mode)
 Want to see what the script *would* do without changing anything?
 ```bash
-sudo python3 harden.py --dry-run
+sudo python3 IronTux.py --dry-run
 ```
 
 ---
@@ -59,7 +100,7 @@ sudo python3 harden.py --dry-run
 Made a mistake? Locked yourself out? IronTux takes a snapshot of your system right before execution. You can easily restore your previous state:
 
 ```bash
-sudo python3 harden.py --restore /var/backups/hardening_tool/snapshot_20260222_125000.tar.gz
+sudo python3 IronTux.py --restore /var/backups/hardening_tool/snapshot_20260222_125000.tar.gz
 ```
 *(This restores SSH, Fail2Ban, UFW/Firewalld configs, and restarts the services instantly).*
 
