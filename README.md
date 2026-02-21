@@ -2,50 +2,48 @@
 # 🛡️ IronTux: Enterprise Offline Linux Hardening Tool
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)
-![OS](https://img.shields.io/badge/OS-Debian%20%7C%20Ubuntu%20%7C%20RHEL%20%7C%20Arch%20%7C%20Alpine-success)
+![OS Support](https://img.shields.io/badge/OS-Debian%20%7C%20Ubuntu%20%7C%20RHEL%20%7C%20Arch%20%7C%20Alpine-success)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**IronTux** is a powerful, offline, and Object-Oriented Programming (OOP) based Python script designed to secure fresh Linux installations (VPS or Homelab) in seconds. It specializes in sealing your server against brute-force attacks and patching the infamous **Docker firewall bypass** issue.
+**IronTux** is a powerful, offline, and Object-Oriented Programming (OOP) based Python script designed to secure fresh Linux installations (VPS or Homelab) in seconds. It specializes in sealing your server against brute-force attacks, patching the infamous **Docker firewall bypass** issue, and applying kernel-level network security.
 
-When you install Docker, it silently bypasses `ufw` or `iptables` to expose your container ports to the entire internet. IronTux automatically patches this vulnerability, hardens your SSH, configures Fail2Ban, updates your system, creates a secure admin user, and implements a 1-click rollback system—all while providing a beautiful terminal UI.
+## 🎯 Purpose & Why You Need It
+When you install Docker, it silently bypasses `ufw` or `iptables` to expose your container ports to the entire internet. IronTux automatically patches this critical vulnerability. Furthermore, securing a Linux server manually takes hours of configuring SSH, Fail2Ban, Sysctl, and Firewalls. IronTux automates this entire process with a 1-click rollback system—all while providing a beautiful terminal UI and advanced CLI customizations.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
 *   **🛡️ Multi-Distro Support & OS Auto-Detection**
     *   Automatically adapts to **Debian, Ubuntu, RHEL, CentOS, Rocky, SUSE, Arch,** and **Alpine** Linux.
     *   Dynamically selects the correct package manager (`apt`, `dnf`, `zypper`, `pacman`, `apk`).
 
-*   **🔄 Automated Patching & Updates**
-    *   Updates all system packages to their latest secure versions automatically.
-    *   Installs and configures `unattended-upgrades` (Debian) or `dnf-automatic` (RHEL) for silent background patching.
+*   **🐳 Docker-Safe Firewall Automation**
+    *   **Docker Port Leak Fix:** Automatically injects custom `DOCKER-USER` iptables rules into UFW to prevent Docker from exposing internal container ports to the public internet.
+    *   Implements a strict "Default Deny" policy.
+    *   **Custom Ports:** Interactively allows you to open additional custom ports (e.g., `8080/tcp`, `51820/udp`) alongside standard web and SSH ports.
 
-*   **👤 Secure Admin User Creation**
-    *   Provides an interactive prompt to create a new non-root admin user.
-    *   Automatically assigns the user to the `sudo` (Debian) or `wheel` (RHEL/Arch) group.
+*   **⚙️ Deep Kernel Hardening (`sysctl`)**
+    *   Enables **TCP SYN Cookies** to mitigate SYN flood DDoS attacks.
+    *   Enables **Reverse Path Filtering (RP Filter)** to prevent IP spoofing.
+    *   Disables **ICMP Redirects** to prevent MITM routing attacks.
+    *   Enables **ASLR** (Address Space Layout Randomization) to protect against buffer overflow exploits.
 
-*   **🔐 Deep SSH Hardening**
+*   **🔐 Zero-Trust SSH Hardening**
     *   Disables vulnerable root logins (`PermitRootLogin no`).
     *   Enforces Public Key Authentication (`PasswordAuthentication no`).
     *   Disables `X11Forwarding` and limits `MaxAuthTries` to 3.
 
-*   **🛑 Automated Anti-Bruteforce Defense**
-    *   Installs and configures `Fail2Ban` out of the box (1-hour ban after 3 failed login retries).
+*   **🔄 Automated Patching & Anti-Bruteforce**
+    *   **Auto-Updates:** Updates packages and configures `unattended-upgrades` (Debian) or `dnf-automatic` (RHEL) for silent background patching.
+    *   **Fail2Ban:** Installs and configures brute-force protection out of the box (1-hour ban after 3 failed login retries).
 
-*   **🐳 Docker-Safe Firewall Automation**
-    *   **Docker Port Leak Fix:** Automatically injects custom `DOCKER-USER` iptables rules into UFW to prevent Docker from exposing internal container ports to the public internet.
-    *   Only opens essential web ports (`80/HTTP`, `443/HTTPS`) and your custom, user-defined SSH port.
-    *   Supports both `UFW` (Debian-based) and `Firewalld` (RHEL-based).
+*   **🔍 Post-Hardening Service Verification**
+    *   Actively verifies if critical services (`sshd`, `fail2ban`, `ufw`/`firewalld`) are successfully running after configuration changes are made, alerting you instantly if something crashes.
 
 *   **⏪ 1-Click Rollback & System Snapshots**
-    *   Before executing any changes, the script creates a `.tar.gz` backup archive of all critical configuration files (SSH, UFW, Firewalld, Fail2Ban, etc.).
+    *   Before executing any changes, the script creates a `.tar.gz` backup archive of all critical configuration files (`sshd_config`, `ufw rules`, `fstab`, etc.).
     *   Instantly revert your system to its previous state with a single command.
-
-*   **🎨 Developer & UX Friendly**
-    *   **100% Offline Execution:** Performs all hardening operations locally without making external API calls.
-    *   **Dry-Run Mode:** Simulate operations and view intended changes without modifying your system.
-    *   **Rich Terminal UI:** Displays interactive progress bars and a final operation summary dashboard using the `rich` library.
 
 ---
 
@@ -64,7 +62,7 @@ sudo dnf install python3-pip
 sudo pip3 install rich
 ```
 
-### 2. Run the Script
+### 2. Standard Execution
 Clone the repository and run the script as root:
 
 ```bash
@@ -74,25 +72,41 @@ sudo python3 IronTux.py
 ```
 
 ### 3. Dry-Run (Test Mode)
-Want to see what the script *would* do without changing anything? Run it in dry-run mode:
-
+Want to see what the script *would* do without changing anything on your system?
 ```bash
 sudo python3 IronTux.py --dry-run
 ```
 
 ---
 
-## ⏪ Restoring from Backup
+## 🛠️ Advanced CLI Customization
+Are you an advanced user who only wants to apply specific hardening modules? IronTux supports CLI flags to skip certain operations:
 
+```bash
+# Skip system updates and patching
+sudo python3 IronTux.py --no-update
+
+# Harden everything EXCEPT the firewall (useful if you use a cloud provider's external firewall)
+sudo python3 IronTux.py --skip-fw
+
+# Skip SSH configuration (useful if you already configured it manually)
+sudo python3 IronTux.py --skip-ssh
+
+# Combine flags: Only apply Sysctl, User creation, and SSH Hardening
+sudo python3 IronTux.py --no-update --skip-fw --skip-f2b
+```
+
+---
+
+## ⏪ Restoring from Backup
 Made a mistake or locked yourself out? IronTux takes a snapshot of your system right before execution. You can easily restore your previous state:
 
 ```bash
 sudo python3 IronTux.py --restore /var/backups/hardening_tool/snapshot_YYYYMMDD_HHMMSS.tar.gz
 ```
-*(This restores SSH, Fail2Ban, UFW/Firewalld configs, and restarts the services instantly).*
+*(This automatically extracts the old configuration files and restarts `sshd`, `fail2ban`, and your firewall instantly).*
 
 ---
-<img width="3600" height="8733" alt="resim" src="https://github.com/user-attachments/assets/555d5254-8533-4ff6-a46f-ff520b4cd74e" />
 
 ## 🤝 Contributing
 Contributions, issues, and feature requests are welcome! 
