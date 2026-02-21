@@ -43,13 +43,13 @@ Clone the repository and run the script as root:
 ```bash
 git clone https://github.com/coddard/IronTux/
 cd irontux
-sudo python3 harden.py
+sudo python3 IronTux.py
 ```
 
 ### 3. Dry-Run (Test Mode)
 Want to see what the script *would* do without changing anything?
 ```bash
-sudo python3 harden.py --dry-run
+sudo python3 IronTux.py --dry-run
 ```
 
 ---
@@ -59,7 +59,7 @@ sudo python3 harden.py --dry-run
 Made a mistake? Locked yourself out? IronTux takes a snapshot of your system right before execution. You can easily restore your previous state:
 
 ```bash
-sudo python3 harden.py --restore /var/backups/hardening_tool/snapshot_20260222_125000.tar.gz
+sudo python3 IronTux.py --restore /var/backups/hardening_tool/snapshot_20260222_125000.tar.gz
 ```
 *(This restores SSH, Fail2Ban, UFW/Firewalld configs, and restarts the services instantly).*
 
